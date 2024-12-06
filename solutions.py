@@ -360,7 +360,7 @@ def s5_schedule_print(fn="static/s5.txt"):
               
   return correct_mid_sum, incorrect_mid_sum
 
-def s6_map_symbols(fn="static/s6.txt"):
+def s6_map_symbols(fn="static/s6.txt", part=2):
   smap = []
   drns = ['^', ">", "v", "<"]
   loc = [-1, -1, -1]
@@ -457,26 +457,34 @@ def s6_map_symbols(fn="static/s6.txt"):
       #         cnt += 1
       #   return cnt
       if all_locs[-1][2] == loc[2]:
+        if part == 1:
+          cnt = 0
+          for i in range(smap.shape[0]):
+            for j in range(smap.shape[1]):
+              if smap[i,j] == 2:
+                cnt += 1
+          return cnt
         return False
       elif any(map(lambda l: np.array_equal(l, loc), all_locs)):
         return True
-      
+  if part == 1:
+    return traverse(orig_map, loc, mark=True)
   begin = (loc[0], loc[1])
   print(begin)
   traverse(np.copy(orig_map), loc, end=False)
+  traj = set()
   result = set()
   for loc, (i,j) in injections:
-    if (i, j) != begin:
+    if (i,j) not in traj and orig_map[i, j] == 0:
       smap = np.copy(orig_map)
       smap[i, j] = 1
+      traj.add((i,j))
       if traverse(smap, loc, mark=False):
         # smap[i, j] = 7
         # print(num)
         # print(smap)
-        print(i,j)
         result.add((i,j))
   return len(result)
 
 if __name__ == "__main__":
-  print(s6_map_symbols("static/s6.txt"))
-
+  print(s6_map_symbols("static/s6.txt", part=2))
