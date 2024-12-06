@@ -1,4 +1,5 @@
 import numpy as np
+from collections import deque
 def s0_tree_directories():
     class Dir:
       def __init__(self, nm):
@@ -315,6 +316,167 @@ def s4_word_search(fn="static/s4.txt", part=2):
           print(i,j)
           word_cnt += 1
     return word_cnt
+  
+def s5_schedule_print(fn="static/s5.txt"):
+  with open(fn, "r") as f:
+    precedence = []
+    switch = False
+    correct_mid_sum = 0
+    incorrect_mid_sum = 0
+    while True:
+      line = f.readline()
+      if not line:
+        break
+      if not switch:
+        if line == "\n":
+          switch = True
+          continue
+        precedence.append([int(i) for i in line.strip().split("|")])
+      else:
+        update = [int(i) for i in line.strip().split(",")]
+        upd_map = {update[i]: i for i in range(len(update))}
+        order = True
+        for pi, pj in precedence:
+          if pi in upd_map and pj in upd_map:
+            if upd_map[pi] >= upd_map[pj]:
+              order = False
+              break
+        if order:
+          correct_mid_sum += update[int(len(update)/2)]
+        else:
+          reorder = [update.pop(0)]
+          while update:
+            num = update.pop(0)
+            constraint = [p[1] for p in filter(lambda p: p[0]==num, precedence)]
+            append = True
+            for i in range(len(reorder)):
+              if reorder[i] in constraint:
+                reorder.insert(i, num)
+                append = False
+                break
+            if append:
+              reorder.append(num)
+          incorrect_mid_sum += reorder[int(len(reorder)/2)]
+              
+  return correct_mid_sum, incorrect_mid_sum
+
+def s6_map_symbols(fn="static/s6.txt"):
+  smap = []
+  drns = ['^', ">", "v", "<"]
+  loc = [-1, -1, -1]
+  with open(fn, "r") as f:
+    while True:
+      line = f.readline()
+      if not line:
+        break
+      row = []
+      for c in line.strip():
+        if c == '.':
+          row.append(0)
+        elif c == '#':
+          row.append(1)
+        else:
+          if c in drns:
+            loc[0] = len(smap)
+            loc[1] = len(row)
+            loc[2] = drns.index(c)
+          row.append(2)
+      smap.append(row)
+  orig_map = np.array(smap, dtype=np.uint8)
+  # print(smap, loc)
+  injections = []
+
+  def traverse(smap, loc, mark=False, end=True):
+    all_locs = []
+    while True:
+      all_locs.append(np.copy(loc))
+      match loc[2]:
+        case 0:
+          for i in range(loc[0]-1, -1, -1):
+            if not smap[i][loc[1]]:
+              if mark:
+                smap[i][loc[1]] = 2
+            elif smap[i][loc[1]] == 1:
+              loc[2] = 1
+              break
+            if not end:
+              inject = np.copy(loc)
+              loc[0] = i
+              injections.append((inject, (loc[0], loc[1])))
+            else:
+              loc[0] = i
+        case 1:
+          for j in range(loc[1]+1, smap.shape[1]):
+            if not smap[loc[0], j]:
+              if mark:
+                smap[loc[0], j] = 2
+            elif smap[loc[0], j] == 1:
+              loc[2] = 2
+              break
+            if not end:
+              inject = np.copy(loc)
+              loc[1] = j
+              injections.append((inject, (loc[0], loc[1])))
+            else:
+              loc[1] = j
+        case 2:
+          for i in range(loc[0]+1, smap.shape[0]):
+            if not smap[i, loc[1]]:
+              if mark:
+                smap[i, loc[1]] = 2
+            elif smap[i, loc[1]] == 1:
+              loc[2] = 3
+              break
+            if not end:
+              inject = np.copy(loc)
+              loc[0] = i
+              injections.append((inject, (loc[0], loc[1])))
+            else:
+              loc[0] = i
+              
+        case 3:
+          for j in range(loc[1]-1, -1, -1):
+            if not smap[loc[0], j]:
+              if mark:
+                smap[loc[0], j] = 2
+            elif smap[loc[0], j] == 1:
+              loc[2] = 0
+              break
+            if not end:
+              inject = np.copy(loc)
+              loc[1] = j
+              injections.append((inject, (loc[0], loc[1])))
+            else:
+              loc[1] = j
+
+      # if prev_drn == loc[2]:
+      #   cnt = 0
+      #   for i in range(smap.shape[0]):
+      #     for j in range(smap.shape[1]):
+      #       if smap[i,j] == 2:
+      #         cnt += 1
+      #   return cnt
+      if all_locs[-1][2] == loc[2]:
+        return False
+      elif any(map(lambda l: np.array_equal(l, loc), all_locs)):
+        return True
+      
+  begin = (loc[0], loc[1])
+  print(begin)
+  traverse(np.copy(orig_map), loc, end=False)
+  result = set()
+  for loc, (i,j) in injections:
+    if (i, j) != begin:
+      smap = np.copy(orig_map)
+      smap[i, j] = 1
+      if traverse(smap, loc, mark=False):
+        # smap[i, j] = 7
+        # print(num)
+        # print(smap)
+        print(i,j)
+        result.add((i,j))
+  return len(result)
+
 if __name__ == "__main__":
-  print(s4_word_search(part=2))
+  print(s6_map_symbols("static/s6.txt"))
 
