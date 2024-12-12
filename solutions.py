@@ -486,5 +486,340 @@ def s6_map_symbols(fn="static/s6.txt", part=2):
         result.add((i,j))
   return len(result)
 
+def s7_equation_test(fn="static/s7.txt", part=2):
+  def check_equation(nums: list, part):   
+    cnt = len(nums)-1   
+    target = nums.pop(0)
+    eq_queue = [(cnt, target, "")]
+    while eq_queue:
+      l, prod, ops = eq_queue.pop(0)
+      if l == 1:
+        if nums[0] == prod:
+          print(f"{target} = {str(nums[0])+ops}")
+          return target
+        continue
+      head = nums[l-1]
+      if prod % head == 0:
+        eq_queue.append((l-1, prod/head, f" * {head}"+ops))
+      if part == 2:
+        rem = prod - head
+        lim = pow(10, len(str(head)))
+        if rem >= 0 and rem % lim == 0:
+          eq_queue.append((l-1, rem/lim, f" || {head}"+ops))
+
+      eq_queue.append((l-1, prod-head, f" + {head}"+ops))
+    return 0
+
+
+  correct_sum = 0
+  with open(fn, "r") as f:
+    while True:
+      line = f.readline()
+      if not line:
+        return correct_sum
+      nums = []
+      num = ""
+      for c in line.strip():
+        if c.isnumeric():
+          num += c
+        elif num:
+          nums.append(int(num))
+          num = ""
+      if num:
+        nums.append(int(num))
+      correct_sum += check_equation(nums, part)
+
+def s8_antennna_map(fn="static/s8.txt"):
+  lmap = {}
+  rows = 0
+  cols = 0
+  with open(fn, "r") as f:
+    while True:
+      line = f.readline()
+      if not line:
+        break
+      if not cols:
+        cols = len(line.strip())
+      for j in range(cols):
+        c = line[j]
+        if c.isalnum():
+          if c not in lmap:
+            lmap[c] = []
+          lmap[c].append((rows, j))
+      rows += 1
+  print(lmap, rows, cols)
+  antinodes = set()
+  def loc_inbound(x, y):
+    if x < 0 or x >= rows:
+      return False
+    if y < 0 or y >= cols:
+      return False
+    return True
+    
+  for sig, locs in lmap.items():
+    for i in range(len(locs)-1):
+      x1, y1 = locs[i]
+      for j in range(i+1, len(locs)):
+        x2, y2 = locs[j]
+        dx, dy = x2-x1, y2-y1
+        t1, t2 = x1, y1
+        while True:
+          if loc_inbound(t1, t2):
+            antinodes.add((t1, t2))
+          else:
+            break
+          t1, t2 = t1-dx, t2-dy
+
+        t1, t2 = x2, y2
+        while True:
+          if loc_inbound(t1, t2):
+            antinodes.add((t1, t2))
+          else:
+            break
+          t1, t2 = t1 + dx, t2 + dy
+
+  print(len(antinodes)) 
+  return 0     
+
+def s9_file_compact(fn="static/s9.txt", part=2):
+  with open(fn, "r") as f:
+    orig = f.read()
+  alt_file = True
+  file_id = 0
+  space = []
+  def check(arr):
+    checksum = 0
+    for i in range(len(arr)):
+      checksum += i * arr[i]
+    return checksum
+
+  if part == 1:
+    for c in orig:
+      if alt_file:
+        space += [file_id]*int(c)
+        file_id += 1
+      else:
+        space += [-1]*int(c)
+      alt_file = not alt_file
+    i = 0
+    while i < len(space):
+      if space[i] >= 0:
+        i += 1
+        continue
+      if space[-1] < 0:
+        space.pop()
+        continue
+      space[i] = space.pop()
+      i += 1
+    return check(space)
+    
+  else:
+    for c in orig:
+      if alt_file:
+        space.append([file_id, int(c)])
+        file_id += 1
+      elif c != '0':
+        space.append([-1, int(c)])
+      alt_file = not alt_file
+    i = len(space)-1
+    start = 0
+    while start < i:
+      if space[i][0] >= 0:
+        restart = False
+        # print(space[i])
+        for j in range(start, i):
+          if space[j][0] < 0:
+            if not restart:
+              start = j
+              # print(start)
+              restart = True
+            if space[j][1] >= space[i][1]:
+              space[j][0] = space[i][0]
+              space[i][0] = -1
+              dl = space[j][1] - space[i][1]
+              if dl > 0:
+                space[j][1] = space[i][1]
+                space.insert(j+1, [-1, dl])
+                i += 1
+              break
+      i -= 1
+    space_sum = []
+    for entry in space:
+      if entry[0] <= 0:
+        space_sum += [0]*entry[1]
+      else:
+        space_sum += [entry[0]]*entry[1]
+    # print(len(space_sum))
+    return check(space_sum)
+
+def s10_terrain_trailhead(fn="static/s10.txt", part=2):
+  with open(fn, "r") as f:
+    topo = []
+    heads = []
+    while True:
+      line = f.readline()
+      if not line:
+        break
+      hs = []
+      for c in line:
+        if c.isnumeric():
+          if c == '0':
+            heads.append((len(topo), len(hs)))
+          hs.append(int(c))
+      topo.append(hs)
+
+  topo = np.array(topo, dtype=np.uint8)
+
+  def inbound(i, j):
+    if i < 0 or i >= topo.shape[0]:
+      return False
+    if j < 0 or j >= topo.shape[1]:
+      return False
+    return True
+  def find_score(i0, j0):
+    locs = {(i0, j0): 1}
+    paths = []
+    while True:
+      nlocs = {}
+      for (i, j), l in locs.items():
+        num = topo[i, j]
+        if num == 9:
+          if part == 1:
+            return len(locs)
+          return sum(locs.values())
+        for ni, nj in [(i-1, j), (i+1, j), (i, j-1), (i, j+1)]:
+          if inbound(ni, nj) and topo[ni, nj] == num + 1:
+            if (ni, nj) not in nlocs:
+              nlocs[(ni, nj)] = l
+            else:
+              nlocs[(ni, nj)] += l
+      if nlocs:
+        locs = nlocs 
+  
+  scores = list(map(lambda loc: find_score(loc[0], loc[1]), heads))
+  print(scores)
+  return sum(scores)
+
+def s11_stone_transform(fn="static/s11.txt"):
+  with open(fn, "r") as f:
+    line = f.readline().strip()
+    stones = {c: 1 for c in line.split(" ")}
+
+  def add_record(rec, num, cnt):
+    if num not in rec:
+      rec[num] = cnt
+    else:
+      rec[num] += cnt
+    
+  for t in range(75):
+    nstones = {}
+    for num, cnt in stones.items():
+      if num == '0':
+        add_record(nstones, '1', cnt)
+      elif len(num) % 2 == 0:
+        l = int(len(num) / 2)
+        sl = num[:l]
+        r = l
+        while num[r] == '0':
+          if r == len(num)-1:
+            break
+          r += 1
+        sr = num[r:]
+        add_record(nstones, sl, cnt)
+        add_record(nstones, sr, cnt)
+      else:
+        add_record(nstones, str(int(num)*2024), cnt)
+    stones = nstones
+    # print(stones)
+  return sum(stones.values())
+
+def s12_plot_adjoint(fn="static/s12.txt", part=1):
+  with open(fn, "r") as f:
+    lines = [l.strip() for l in f.readlines()]
+  plots = []  # locs, name, perim
+  def inbound(i, j):
+    if i < 0:
+      return False
+    if j < 0:
+      return False
+    return True
+  def check_loc(i, j):
+    # print(plots)
+    plot_ids = []      
+    for (ni, nj, drn) in [(i-1, j, 0), (i, j-1, 2)]:
+      if inbound(ni, nj):
+        for n in range(len(plots)):
+          if (ni, nj) in plots[n][0]:
+            plot_ids.append((n, drn+1))
+            break
+    def plot_add(nd, i, j):
+      n, drn = nd
+      plots[n][0].append((i,j))
+      plots[n][2].remove((i, j, drn))
+      for (ni, nj, ndrn) in [(i-1, j, 0), (i+1, j, 1), (i, j-1, 2), (i, j+1, 3)]:
+        if ndrn != drn-1:
+          plots[n][2].append((ni,nj, ndrn))
+
+    if not plot_ids or lines[i][j] not in [plots[n][1] for n,_ in plot_ids]:
+      plots.append([[(i, j)], lines[i][j], [(i-1, j, 0), (i+1, j, 1), (i, j-1, 2), (i, j+1, 3)]])
+    elif len(plot_ids) == 1:
+      plot_add(plot_ids[0], i, j)
+    else:
+      (p1, d1), (p2, d2) = plot_ids[0], plot_ids[1]
+      if p1 == p2:
+        plots[p1][0].append((i,j))
+        plots[p1][2].remove((i, j, d1))
+        plots[p2][2].remove((i, j, d2))
+        plots[p1][2] += [(i+1, j, 1), (i, j+1, 3)]
+      elif plots[p1][1] == plots[p2][1]:
+        plots[p1][2].remove((i, j, d1))
+        plots[p2][2].remove((i, j, d2))
+        plots[p1][0] += [(i,j)]+plots[p2][0]
+        plots[p1][2] += plots[p2][2]
+        plots[p1][2] += [(i+1, j, 1), (i, j+1, 3)]
+        plots.pop(p2)
+
+      elif lines[i][j] == plots[p1][1]:
+        plot_add(plot_ids[0], i, j)
+      else:
+        plot_add(plot_ids[1], i, j)   
+
+  for i in range(len(lines)):
+    for j in range(len(lines[0])):
+      # print(i,j, lines[i][j])
+      check_loc(i, j)
+  price = 0
+  if part == 1:
+    for plot in plots:
+      # print(plot[1], len(plot[2]))
+      price += len(plot[0]) * len(plot[2])
+  else:
+    for plot in plots:
+      sides = [[],[],[],[]]
+      while plot[2]:
+        i, j, drn = plot[2].pop(0)
+        sides[drn].append((i,j))
+      sides[0].sort()
+      sides[1].sort()
+      sides[2].sort(key=lambda loc: (loc[1], loc[0]))
+      sides[3].sort(key=lambda loc: (loc[1], loc[0]))
+      ns = 4
+      for drn in [0,1]:
+        for i in range(1, len(sides[drn])):
+          if sides[drn][i][0] != sides[drn][i-1][0] or sides[drn][i][1] - sides[drn][i-1][1] > 1:
+            ns += 1
+      for drn in [2,3]:
+        for i in range(1, len(sides[drn])):
+          if sides[drn][i][1] != sides[drn][i-1][1] or sides[drn][i][0] - sides[drn][i-1][0] > 1:
+            ns += 1
+      price += len(plot[0]) * ns
+      # print(plot[1], ns)
+
+  return price
+
+
 if __name__ == "__main__":
-  print(s6_map_symbols("static/s6.txt", part=2))
+  # print(s10_terrain_trailhead("static/s10.txt"))
+  # print(s11_stone_transform("static/s11.txt"))
+  print(s12_plot_adjoint("static/s12.txt", part=2))
+
