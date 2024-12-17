@@ -1,5 +1,8 @@
 import numpy as np
 from collections import deque
+from matplotlib import pyplot as plt
+from PIL import Image
+
 def s0_tree_directories():
     class Dir:
       def __init__(self, nm):
@@ -817,9 +820,417 @@ def s12_plot_adjoint(fn="static/s12.txt", part=1):
 
   return price
 
+def s13_price_positioning(fn="static/s13.txt", part=2):
+  def cost(dxa, dya, dxb, dyb, x, y):
+    # a * dxa + b * dxb = x
+    # a * dya + b * dyb = y
+    
+    # a * dxa + r * (y - a * dya) = x
+    if part == 2:
+      x+=10000000000000
+      y+=10000000000000
+    if dyb * dxa - dxb * dya == 0:
+      return 0
+    
+    num_a = dyb*x - dxb*y
+    den_a = dxa*dyb - dxb * dya
+    if num_a % den_a != 0:
+      return 0
+    na = int(num_a / den_a)
+    num_b = y - na * dya
+    if num_b % dyb != 0:
+      return 0
+    nb = int(num_b / dyb)
+    if part == 1:
+      if na > 100 or nb > 100:
+        return 0
+    
+    print(na, nb)
+    return na * 3 + nb
 
+  with open(fn, "r") as f:
+    tot_cost = 0
+    while True:
+      line = f.readline()
+      if not line:
+        return tot_cost
+      lines = [line, f.readline(), f.readline()]
+      nums = []
+      for line in lines:
+        num = ""
+        for c in line:
+          if c.isnumeric():
+            num += c
+          elif num:
+            nums.append(int(num))
+            num = ""
+        if num:
+          nums.append(int(num))
+      # print(nums)
+      tot_cost += cost(nums[0], nums[1], nums[2], nums[3], nums[4], nums[5])
+      f.readline()
+
+def s14_robots_movement(fn="static/s14.txt", part=2):
+  rows = 103
+  cols = 101
+  
+  with open(fn, "r") as f:
+    locs = []
+    vels = []
+    while True:
+      line = f.readline()
+      if not line:
+        break
+      nums = []
+      num = ""
+      for c in line:
+        if c.isnumeric() or c=='-':
+          num += c
+        elif num:
+          nums.append(int(num))
+          num = ""
+      if num:
+        nums.append(int(num))
+      locs.append(nums[:2])
+      vels.append(nums[2:])
+  locs = np.array(locs, dtype=int)
+  vels = np.array(vels, dtype=int)
+  lim = np.array([cols, rows])
+  if part == 1:
+    for i in range(100):
+      locs = (locs + vels) % lim
+
+    states = np.zeros((rows, cols), dtype=int)
+    for i in range(locs.shape[0]):
+      states[locs[i,1], locs[i,0]] += 1
+    hrows, hcols = int(rows/2), int(cols/2)
+    return np.sum(states[:hrows, :hcols])*np.sum(states[:hrows, hcols+1:])*np.sum(states[hrows+1:, :hcols])*np.sum(states[hrows+1:, hcols+1:])
+  else:
+    for t in range(100000):
+      states = np.zeros((rows, cols), dtype=bool)
+      for i in range(locs.shape[0]):
+        if not states[locs[i,1], locs[i,0]]:
+          states[locs[i,1], locs[i,0]] = True
+      num = np.sum(states)
+      if num == locs.shape[0]:
+        im = Image.fromarray(125*states, mode="L")
+        im.save(f"robots/{t}.png")
+        print(t)
+      locs = (locs + vels) % lim
+
+def s15_robot_pushing(fn="static/s15.txt", part=2):
+  with open(fn, "r") as f:
+    symbs = {"#":1, "O":0, ".":2, "@":3}
+    acts = {"^":0, "v":1, "<":2, ">":3}
+    smap = []
+    actions = []
+    rloc = np.zeros(2, dtype=int)
+    while True:
+      line = f.readline()
+      if not line.strip():
+        break
+      row = []
+      for c in line.strip():
+        if c == "@":
+          rloc[0] = len(smap)
+          rloc[1] = len(row)
+        row.append(symbs[c])
+      smap.append(row)
+    while True:
+      line = f.readline()
+      if not line:
+        break
+      actions += [acts[c] for c in line.strip()]
+  smap = np.array(smap, dtype=np.uint8)
+  directions = np.array([[-1,0], [1,0], [0,-1], [0,1]], dtype=int)
+
+  def move(a, loc):
+    adj = tuple(loc+directions[a])
+    if smap[adj] == 2:
+      smap[adj] = 3
+      smap[tuple(loc)] = 2
+      return loc+directions[a]
+    if smap[adj] == 1:
+      return loc
+    
+    if part == 1:
+      nloc = loc+directions[a]
+      while True:
+        s = smap[tuple(nloc)]
+        if s == 0:
+          nloc += directions[a]
+        elif s == 1:
+          return loc
+        else:
+          smap[tuple(nloc)] = 0
+          smap[adj] = 3
+          smap[tuple(loc)] = 2
+          return loc+directions[a]
+    else:
+      nloc = loc+directions[a]
+      if a >= 2:
+        while True:
+          s = smap[tuple(nloc)]
+          if s > 3:
+            nloc += directions[a]
+          elif s == 1:
+            return loc
+          else:
+            if a == 2:
+              smap[loc[0]:loc[0]+1, nloc[1]:loc[1]] = smap[loc[0]:loc[0]+1, nloc[1]+1:loc[1]+1]
+            else:
+              smap[loc[0]:loc[0]+1, loc[1]+1:nloc[1]+1] = smap[loc[0]:loc[0]+1, loc[1]:nloc[1]]
+            smap[tuple(loc)] = 2
+            return loc+directions[a]
+      else:
+        layers = [(loc[1], loc[1])]
+        row = adj[0]
+        while True:
+          l, r = layers[-1]
+          nl, nr = l, r
+          if smap[row, nl] == 5:
+            nl -= 1
+          if smap[row, nr] == 4:
+            nr += 1
+          if np.any(smap[row, nl:nr+1] == 1):
+            return loc
+          if np.all(smap[row, nl:nr+1] == 2):
+            for i in range(len(layers)-1, -1, -1):
+              l, r = layers[i]
+              row = loc[0] + directions[a][0]*i
+              nrow = row+directions[a][0]
+              smap[nrow:nrow+1, l:r+1] = smap[row:row+1, l:r+1]
+              smap[row:row+1, l:r+1] = 2
+            smap[tuple(loc)] = 2
+            return loc+directions[a]
+          while smap[row, nl] == 2:
+            nl += 1
+          while smap[row, nr] == 2:
+            nr -= 1
+          layers.append((nl, nr))
+          row += directions[a][0]
+
+  gps = 0
+  if part == 1:
+    for a in actions:
+      rloc = move(a, rloc)
+
+    for r in range(smap.shape[0]):
+      for c in range(smap.shape[1]):
+        if smap[r,c] == 0:
+          gps += 100*r+c
+    print(smap)
+  else:
+    smap = smap.repeat(2, 1)
+    for r in range(smap.shape[0]):
+      for c in range(0,smap.shape[1],2):
+        if smap[r,c] == 0:
+          smap[r,c] = 4
+          smap[r,c+1] = 5
+    rloc[1] *= 2
+    smap[tuple(rloc+directions[3])] = 2
+    for a in actions:
+      rloc = move(a, rloc)
+    print(smap)
+    for r in range(smap.shape[0]):
+      for c in range(smap.shape[1]):
+        if smap[r,c] == 4:
+          gps += 100*r+c
+  return gps 
+
+def s16_maze_shortest(fn="static/s16.txt"):
+  with open(fn, "r") as f:
+    maze = []
+    sp = np.zeros(3, dtype=int)
+    ep = np.zeros(2, dtype=int)
+    symbs = {"#":-1, ".":0, "S":0, "E":0}
+    while True:
+      line = f.readline()
+      if not line:
+        break
+      row = []
+      for c in line.strip():
+        if c == "S":
+          sp[0] = len(maze)
+          sp[1] = len(row)
+          sp[2] = 3
+        elif c == "E":
+          ep[0] = len(maze)
+          ep[1] = len(row)
+        row.append([symbs[c]]*4)
+      maze.append(row)
+  maze = np.array(maze, dtype=int)
+  directions = np.array([[0,-1,0], [-1,0,0], [0,1,0], [1,0,0]], dtype=int)
+
+  def valid(loc):
+    if (loc[0] < 0 or loc[0] >= maze.shape[0] or loc[1] < 0 or loc[1] >= maze.shape[1]):
+      return False
+    if (maze[tuple(loc)] < 0):
+      return False
+    return True
+
+  class SearchTree:
+    def __init__(self, parent, path:list):
+      self.parent = parent
+      self.path = path
+      self.children = list[SearchTree]()
+      self.cost = 0
+      self.eval()
+
+    def search(self):
+      loc = self.path[-1]
+      while True:
+        if np.array_equal(ep, loc[:2]):
+          self.cost = maze[tuple(loc)]
+          return []
+        adjacent = []
+        for i in range(directions.shape[0]):
+          nloc = loc + directions[i]
+          if valid(nloc):
+            head = loc[2]
+            if not self.parent or abs(i-head) != 2:
+              nloc[2] = i
+              cost = maze[tuple(loc)]+1
+              if i != head:
+                cost += 100
+              if abs(i-head) == 2:
+                cost += 100
+              if not maze[tuple(nloc)] or cost < maze[tuple(nloc)]:
+                maze[tuple(nloc)] = cost
+                adjacent.append(nloc)
+
+        if not adjacent:
+          return []
+        elif len(adjacent) == 1:
+          self.path.append(adjacent[0])
+        else:
+          for nloc in adjacent:
+            self.children.append(SearchTree(self, [nloc]))
+          return self.children
+    
+    def eval(self):
+      self.score = maze[tuple(self.path[-1])]
+  
+  def traverse():
+    tree = SearchTree(None, [sp])
+    front = [tree]
+
+    min_cost = 0
+    min_tree = None
+    while front:
+      low_tree = front.pop(0)
+      if min_cost and low_tree.score >= min_cost:
+        break
+      for ntree in low_tree.search():
+        if ntree.cost != 0:
+          if not min_cost or ntree.cost < min_cost:
+            min_cost = ntree.cost
+            min_tree = ntree
+          continue
+        added = False
+        for i in range(len(front)):
+          if front[i].score >= ntree.score:
+            front.insert(i,ntree)
+            added = True
+            break
+        if not added:
+          front.append(ntree)
+    return min_cost
+  
+  return traverse()
+        
+def s17_operating_system(fn="static/s17.txt", part=2):
+  with open(fn, "r") as f:
+    oregs = []
+    program = []
+    while True:
+      line = f.readline()
+      if not line.strip():
+        break
+      num = ""
+      for c in line:
+        if c.isnumeric():
+          num += c
+      oregs.append(int(num))
+    oregs.append(0)
+    line = f.readline()
+    num = ""
+    for c in line:
+      if c.isnumeric():
+        num += c
+      elif num:
+        program.append(int(num))
+        num = ""
+    if num:
+      program.append(int(num))
+  
+  def exe(a):
+    regs = [r for r in oregs]
+    regs[0] = a
+    ptr = 0
+    output = []
+    def combo(v):
+      if v < 4:
+        return v
+      return regs[v-4]
+    while ptr < len(program)-1:
+      # print([bin(regs[i]) for i in range(3)])
+      opcode = program[ptr]
+      operand = program[ptr+1]
+
+      match opcode:
+        case 0:
+          regs[0] = int(regs[0] / pow(2, combo(operand)))
+        case 1:
+          regs[1] = operand ^ regs[1]
+        case 2:
+          regs[1] = combo(operand) % 8
+        case 3:
+          if regs[0] != 0:
+            ptr = operand
+            continue
+        case 4:
+          regs[1] = regs[1] ^ regs[2]
+        case 5:
+          output.append(combo(operand) % 8)
+        case 6:
+          regs[1] = int(regs[0] / pow(2, combo(operand)))
+        case 7:
+          regs[2] = int(regs[0] / pow(2, combo(operand)))
+      ptr += 2
+    return output
+
+  if part == 1:
+    return exe(oregs[0])
+  else:
+    bmap = np.zeros(len(program)*3, dtype=bool)
+    loc = 0
+    def eval(pmap):
+      p = 1
+      a = 0
+      for i in range(pmap.shape[0]-1, -1, -1):
+        if pmap[i]:
+          a += p
+        p *= 2
+      return a
+    
+    for i in range(len(program)-1, -1, -1):
+      tg = program[i]
+      pref = eval(bmap[:loc])*8
+      for src in range(8):
+        out = exe(pref + src)[0]
+        if out == tg:
+          bmap[loc+2] = src % 2
+          bmap[loc+1] = int(src / 2) % 2
+          bmap[loc] = int(src / 4) % 2
+          break
+      loc += 3
+  
+    a = eval(bmap)
+    print(a, exe(a), program, exe(a)==program)
+ 
 if __name__ == "__main__":
-  # print(s10_terrain_trailhead("static/s10.txt"))
-  # print(s11_stone_transform("static/s11.txt"))
-  print(s12_plot_adjoint("static/s12.txt", part=2))
+  # print(s15_robot_pushing("static/s15.txt"))
+  print(s16_maze_shortest("static/ex.txt"))
+  # print(s17_operating_system("static/s17.txt", part=2))
 
