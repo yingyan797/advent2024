@@ -2,6 +2,7 @@ import numpy as np
 from collections import deque
 from matplotlib import pyplot as plt
 from PIL import Image
+import copy
 
 def s0_tree_directories():
     class Dir:
@@ -1060,82 +1061,60 @@ def s16_maze_shortest(fn="static/s16.txt"):
         row.append([symbs[c]]*4)
       maze.append(row)
   maze = np.array(maze, dtype=int)
-  directions = np.array([[0,-1,0], [-1,0,0], [0,1,0], [1,0,0]], dtype=int)
+  directions = np.array([[-1,0,0], [0,-1,0], [1,0,0], [0,1,0]], dtype=int)
 
   def valid(loc):
     if (loc[0] < 0 or loc[0] >= maze.shape[0] or loc[1] < 0 or loc[1] >= maze.shape[1]):
       return False
-    if (maze[tuple(loc)] < 0):
+    if maze[tuple(loc)] < 0:
       return False
     return True
-
-  class SearchTree:
-    def __init__(self, parent, path:list):
+  class Path:
+    def __init__(self, parent, locs:list):
       self.parent = parent
-      self.path = path
-      self.children = list[SearchTree]()
-      self.cost = 0
-      self.eval()
+      self.locs = locs
 
-    def search(self):
-      loc = self.path[-1]
-      while True:
-        if np.array_equal(ep, loc[:2]):
-          self.cost = maze[tuple(loc)]
-          return []
-        adjacent = []
-        for i in range(directions.shape[0]):
-          nloc = loc + directions[i]
-          if valid(nloc):
-            head = loc[2]
-            if not self.parent or abs(i-head) != 2:
-              nloc[2] = i
-              cost = maze[tuple(loc)]+1
-              if i != head:
-                cost += 100
-              if abs(i-head) == 2:
-                cost += 100
-              if not maze[tuple(nloc)] or cost < maze[tuple(nloc)]:
-                maze[tuple(nloc)] = cost
-                adjacent.append(nloc)
-
-        if not adjacent:
-          return []
-        elif len(adjacent) == 1:
-          self.path.append(adjacent[0])
-        else:
-          for nloc in adjacent:
-            self.children.append(SearchTree(self, [nloc]))
-          return self.children
-    
-    def eval(self):
-      self.score = maze[tuple(self.path[-1])]
-  
   def traverse():
-    tree = SearchTree(None, [sp])
-    front = [tree]
+    tree = [Path(None, [sp])]
+    def add_path(nt, d):
+      # print("add", d)
+      for i in range(len(tree)):
+        if d < maze[tuple(tree[i].locs[-1])]:
+          tree.insert(i, nt)
+          return
+      tree.append(nt)
 
-    min_cost = 0
-    min_tree = None
-    while front:
-      low_tree = front.pop(0)
-      if min_cost and low_tree.score >= min_cost:
-        break
-      for ntree in low_tree.search():
-        if ntree.cost != 0:
-          if not min_cost or ntree.cost < min_cost:
-            min_cost = ntree.cost
-            min_tree = ntree
-          continue
-        added = False
-        for i in range(len(front)):
-          if front[i].score >= ntree.score:
-            front.insert(i,ntree)
-            added = True
-            break
-        if not added:
-          front.append(ntree)
-    return min_cost
+    while tree:
+      # print(len(tree))
+      path = tree.pop(0)
+      loc = path.locs[-1]
+      if np.array_equal(loc[:2], ep):
+        return maze[tuple(loc)]
+      adjacent = []
+      for i in range(len(directions)):
+        nloc = loc + directions[i]
+        nloc[2] = i
+        if valid(nloc):
+          cost = maze[tuple(loc)] + 1
+          if abs(loc[2] - i) == 2:
+            if maze[nloc[0], nloc[1], loc[2]] > 0 and maze[nloc[0], nloc[1], loc[2]] <= cost-1:
+              continue
+            cost += 2000
+            if cost < maze[tuple(nloc)]:
+              maze[tuple(nloc)] = cost
+              adjacent.append(nloc)
+            continue
+          if i != loc[2]:
+            cost += 1000
+          if maze[tuple(nloc)] == 0 or cost < maze[tuple(nloc)]:
+            maze[tuple(nloc)] = cost
+            adjacent.append(nloc)
+      if len(adjacent) == 1:
+        path.locs.append(adjacent[0])
+        add_path(path, maze[tuple(adjacent[0])])
+      else:
+        for adj in adjacent:
+          add_path(Path(path, [adj]), maze[tuple(adj)])
   
   return traverse()
         
@@ -1229,8 +1208,81 @@ def s17_operating_system(fn="static/s17.txt", part=2):
     a = eval(bmap)
     print(a, exe(a), program, exe(a)==program)
  
+def s18_ram_maze(fn="static/s18.txt", part=2):
+  sz = 71
+  omaze = np.zeros((sz,sz), dtype=int)
+  rows = []
+  with open(fn, "r") as f:
+    for _ in range(1024):
+      line = f.readline()
+      if not line:
+        break
+      loc = [int(c) for c in line.strip().split(",")]
+      rows.append((loc[1], loc[0]))
+      omaze[loc[1], loc[0]] = -1
+  
+  class Path:
+    def __init__(self, parent, locs):
+      self.parent = parent
+      self.locs = locs
+
+  def traverse(maze):
+    tree = [Path(None, [(0,0)])]
+    def add_path(nt, d):
+      for i in range(len(tree)):
+        if d < maze[tree[i].locs[-1]]:
+          tree.insert(i, nt)
+          return
+      tree.append(nt)
+
+    def verify(path):
+      smap = np.zeros((sz, sz), dtype=np.uint8)
+      p = path
+      while True:
+        for x, y in p.locs:
+          smap[x,y] = 200
+        if not p.parent:
+          # print(smap)
+          Image.fromarray(smap).show()
+          break
+        p = p.parent
+
+    while tree:
+      path = tree.pop(0)
+      x, y = path.locs[-1]
+      if (x, y) == (sz-1, sz-1):
+        verify(path)
+        return maze[x,y]    
+      adjacent = []
+      dist = maze[x, y]+1
+      for nx, ny in [(x-1, y), (x, y-1), (x+1, y), (x, y+1)]:
+        if nx >= 0 and nx < maze.shape[0] and ny >= 0 and ny < maze.shape[1] and maze[nx, ny] >= 0:
+          if maze[nx, ny] == 0 or dist < maze[nx, ny]:
+            maze[nx, ny] = dist
+            adjacent.append((nx, ny))
+      
+      if len(adjacent) == 1:
+        path.locs.append(adjacent[0])
+        add_path(path, dist)
+      else:
+        for adj in adjacent:
+          n_path = Path(path, [adj])
+          add_path(n_path, dist)
+    return -1
+  
+  if part == 1:
+    return traverse(omaze)
+  else:
+    while rows:
+      x, y = rows.pop()
+      omaze[x,y] = 0
+      if traverse(np.copy(omaze)) >= 0:
+        return x,y
+    return False
+
 if __name__ == "__main__":
   # print(s15_robot_pushing("static/s15.txt"))
-  print(s16_maze_shortest("static/ex.txt"))
+  print(s16_maze_shortest("static/s16.txt"))
   # print(s17_operating_system("static/s17.txt", part=2))
+  # print(s18_ram_maze("static/s18.txt", part=1))
 
