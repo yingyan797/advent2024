@@ -1061,6 +1061,7 @@ def s16_maze_shortest(fn="static/s16.txt"):
         row.append([symbs[c]]*4)
       maze.append(row)
   maze = np.array(maze, dtype=int)
+  omaze = np.copy(maze[:,:,0])
   directions = np.array([[-1,0,0], [0,-1,0], [1,0,0], [0,1,0]], dtype=int)
 
   def valid(loc):
@@ -1074,6 +1075,7 @@ def s16_maze_shortest(fn="static/s16.txt"):
       self.parent = parent
       self.locs = locs
 
+  mid_paths = {}
   def traverse():
     tree = [Path(None, [sp])]
     def add_path(nt, d):
@@ -1089,7 +1091,7 @@ def s16_maze_shortest(fn="static/s16.txt"):
       path = tree.pop(0)
       loc = path.locs[-1]
       if np.array_equal(loc[:2], ep):
-        return maze[tuple(loc)]
+        return maze[tuple(loc)], path
       adjacent = []
       for i in range(len(directions)):
         nloc = loc + directions[i]
@@ -1097,26 +1099,66 @@ def s16_maze_shortest(fn="static/s16.txt"):
         if valid(nloc):
           cost = maze[tuple(loc)] + 1
           if abs(loc[2] - i) == 2:
-            if maze[nloc[0], nloc[1], loc[2]] > 0 and maze[nloc[0], nloc[1], loc[2]] <= cost-1:
+            # if maze[nloc[0], nloc[1], loc[2]] > 0 and maze[nloc[0], nloc[1], loc[2]] <= cost-1:
+            #   continue
+            # cost += 2000
+            # if cost < maze[tuple(nloc)]:
+            #   maze[tuple(nloc)] = cost
+            #   adjacent.append(nloc)
+            # continue
+            if path.parent or len(path.locs) > 1:
               continue
-            cost += 2000
-            if cost < maze[tuple(nloc)]:
-              maze[tuple(nloc)] = cost
-              adjacent.append(nloc)
-            continue
+
           if i != loc[2]:
             cost += 1000
           if maze[tuple(nloc)] == 0 or cost < maze[tuple(nloc)]:
             maze[tuple(nloc)] = cost
             adjacent.append(nloc)
+          elif cost == maze[tuple(nloc)]:
+            p = path
+            c = maze[tuple(p.locs.pop())]
+            consist = True
+            while True:
+              for l in reversed(p.locs):
+                if maze[tuple(l)] >= c:
+                  consist = False
+                  break
+                c = maze[tuple(l)]
+              if not p.parent:
+                break
+              p = p.parent
+            if consist:
+              mid_paths[tuple(nloc)] = copy.deepcopy(path)
       if len(adjacent) == 1:
         path.locs.append(adjacent[0])
         add_path(path, maze[tuple(adjacent[0])])
       else:
         for adj in adjacent:
           add_path(Path(path, [adj]), maze[tuple(adj)])
-  
-  return traverse()
+    
+  cost, min_path = traverse()
+  tree = [min_path]
+  bmap = np.zeros((maze.shape[0], maze.shape[1]), dtype=int)
+  while tree:
+    path = tree.pop(0)
+    p = path
+    while True:
+      for loc in p.locs:
+        bmap[loc[0], loc[1]] = 1
+        if tuple(loc) in mid_paths:
+          tree.append(mid_paths[tuple(loc)])
+      
+      if not p.parent:
+        break
+      cp = p
+      p = p.parent
+      cp.parent = None
+      
+  neq = np.sum(bmap)
+  bmap = bmap + omaze + 1
+  Image.fromarray(100*bmap).show()
+  # Image.fromarray(100*omaze+100).show()
+  return cost, neq
         
 def s17_operating_system(fn="static/s17.txt", part=2):
   with open(fn, "r") as f:
@@ -1280,9 +1322,248 @@ def s18_ram_maze(fn="static/s18.txt", part=2):
         return x,y
     return False
 
+def s19_strip_arrange(fn="static/s19.txt"):
+  with open(fn, "r") as f:
+    line = f.readline()
+    resources = []
+    success = []
+    elem = ""
+    for c in line:
+      if c.isalpha():
+        elem += c
+      elif elem:
+        resources.append(elem)
+        elem = ""
+    if elem:
+      resources.append(elem)
+
+    def arrange(target):
+      # print(target)
+      tree = [0 for _ in range(len(target)+1)]
+      tree[0] = 1
+      for prog in range(len(target)):
+        if not tree[prog]:
+          continue
+        for i in range(prog+1, len(target)+1):
+          if target[prog:i] in resources:
+            tree[i] += tree[prog]
+
+      return tree[-1]
+          
+    f.readline()
+    while True:
+      line = f.readline()
+      if not line:
+        print(success)
+        return sum(map(lambda entry: entry[1], success))
+      target = line.strip()
+      strat = arrange(target)
+      if strat:
+        success.append((target, strat))
+  
+def s20_maze_cut(fn="static/s20.txt"):
+  with open(fn, "r") as f:
+    maze = []
+    sp = np.zeros(2, dtype=int)
+    ep = np.zeros(2, dtype=int)
+    symbs = {"#":-1, ".":0, "S":0, "E":0}
+    while True:
+      line = f.readline()
+      if not line:
+        break
+      row = []
+      for c in line.strip():
+        if c == "S":
+          sp[0] = len(maze)
+          sp[1] = len(row)
+        elif c == "E":
+          ep[0] = len(maze)
+          ep[1] = len(row)
+        row.append(symbs[c])
+      maze.append(row)
+  maze = np.array(maze, dtype=int)
+  directions = np.array([[-1,0], [0,-1], [0,1], [1,0]])
+  loc = sp
+  prev = None
+  time = 0
+  def inbound(l):
+    if l[0] >= 0 and l[0] < maze.shape[0] and l[1] >= 0 and l[1] < maze.shape[1]:
+      if maze[tuple(l)] >= 0:
+        return True
+    return False
+
+  track_seq = [sp]
+  while True:
+    for i in range(4):
+      adj = loc+directions[i]
+      if inbound(adj) and (prev is None or not np.array_equal(adj, prev)):
+        time += 1
+        prev = loc
+        loc = adj
+        track_seq.append(tuple(loc))
+        maze[tuple(loc)] = time
+        break
+    if np.array_equal(loc, ep):
+      print(sp, ep, maze[tuple(loc)], len(track_seq))
+      break
+
+  count = {}
+  def add_cut(dt):
+    if dt not in count:
+      count[dt] = 1
+    else:
+      count[dt] += 1
+  def cut(lim):
+    for i in range(1, maze.shape[0]-1):
+      for j in range(1, maze.shape[1]-1):
+        if maze[i,j] < 0:
+          if maze[i-1,j] >= 0 and maze[i+1,j] >= 0:
+            dt1 = abs(maze[i-1,j]-maze[i+1,j])
+            if dt1 >= lim:
+              add_cut(dt1-2)
+          if maze[i,j-1] >= 0 and maze[i,j+1] >= 0:
+            dt2 = abs(maze[i,j-1]-maze[i,j+1])
+            if dt2 >= lim:
+              add_cut(dt2-2)
+  
+  def cut_multi(lim, pl):
+    for i in range(len(track_seq)-lim):
+      xf,yf = track_seq[i]
+      for j in range(i+lim, len(track_seq)):
+        xt,yt = track_seq[j]
+        ctime = abs(xt-xf) + abs(yt-yf)
+        if ctime <= pl and j >= i+ctime+lim:
+          add_cut(j-i-ctime)
+
+  cut_multi(100, 20)
+  print(count)
+  return sum(count.values())
+
+def s21_robot_transition(fn="static/s21.txt"):
+  num_pad = {
+    '7': (0,0),'8': (0,1),'9': (0,2),
+    '4': (1,0),'5': (1,1),'6': (1,2),
+    '1': (2,0),'2': (2,1),'3': (2,2),
+               '0': (3,1),'A': (3,2), 
+  }
+  drn_pad = {
+               '^': (0,1),'A': (0,2),
+    '<': (1,0),'v': (1,1),'>': (1,2)
+  }
+
+  def transit(pad, gap, lf, lt):
+    px,py = pad[lf]
+    x,y = pad[lt]
+    opts = []
+    step = ""
+    if x == px:
+      if y == py:
+        step = ''
+      elif y > py:
+        step = '>'*(y-py)
+      elif y < py:
+        step = '<'*(py-y)
+      opts.append(step+'A')
+    elif y == py:
+      if x > px:
+        step = 'v'*(x-px)
+      else:
+        step = '^'*(px-x)
+      opts.append(step+'A')
+    else:
+      if (x,py) != gap:
+        if x > px:
+          step += 'v'*(x-px)
+        else:
+          step += '^'*(px-x)
+        if y > py:
+          step += '>'*(y-py)
+        else:
+          step += '<'*(py-y)
+        opts.append(step+'A')
+        step = ""
+      if (px,y) != gap:
+        if y > py:
+          step += '>'*(y-py)
+        else:
+          step += '<'*(py-y)
+        if x > px:
+          step += 'v'*(x-px)
+        else:
+          step += '^'*(px-x)
+        opts.append(step+'A')
+    return opts
+
+  drns = list(drn_pad.keys())
+  drn_opts = {}
+  for da in drns:
+    for db in drns:
+      drn_opts[(da, db)] = transit(drn_pad, (0,0), da, db)
+
+  def find_seq(drn_instr, lev):
+      ninstr = {}
+      for da in drns:
+        for db in drns:
+          if da == db:
+            ninstr[(da, db)] = 1
+            continue
+          if (da,db) in [("^","v"),("v","^"), ("<",">"), (">", "<")]:
+            continue
+          opts = drn_opts[(da, db)]
+          if lev == 0:
+            ninstr[(da,db)] = len(opts[0])
+            continue
+          instl = 0
+          for opt in opts:
+            code = 'A'+opt
+            stepl = 0
+            for i in range(len(code)-1):
+              stepl += drn_instr[(code[i+0], code[i+1])]
+            if not instl or stepl < instl:
+              instl = stepl
+          ninstr[(da, db)] = instl
+      return ninstr
+
+  drn_instr = {}
+  for k in range(25):
+    # print(k)
+    drn_instr = find_seq(drn_instr, k)
+
+  nums = list(num_pad.keys())
+  num_instr = {}
+  for na in nums:
+    for nb in nums:
+      opts = transit(num_pad, (3,0), na, nb)
+      instl = 0
+      for opt in opts:
+        code = 'A'+opt
+        stepl = 0
+        for i in range(len(code)-1):
+          stepl += drn_instr[(code[i], code[i+1])]
+        if not instl or stepl < instl:
+          instl = stepl
+      num_instr[(na, nb)] = instl
+
+  comp = 0
+  for src in ["638A","965A","780A","803A","246A"]:
+    code = 'A' + src
+    instl = 0
+    for i in range(len(code)-1):
+      instl += num_instr[(code[i], code[i+1])]
+      num = int(src[:-1])
+    print(instl, num)
+    comp += num*instl
+  return comp
+
 if __name__ == "__main__":
   # print(s15_robot_pushing("static/s15.txt"))
-  print(s16_maze_shortest("static/s16.txt"))
+  # print(s16_maze_shortest("static/s16.txt"))
   # print(s17_operating_system("static/s17.txt", part=2))
   # print(s18_ram_maze("static/s18.txt", part=1))
+  # print(s20_maze_cut("static/s20.txt"))
+  print(s21_robot_transition())
+
+
+
+
 
