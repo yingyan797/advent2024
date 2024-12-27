@@ -1555,15 +1555,241 @@ def s21_robot_transition(fn="static/s21.txt"):
     comp += num*instl
   return comp
 
+def s22_pseudo_random(fn="static/s22.txt"):
+  def sequence(n, time):
+    state = n
+    prune_mask = np.power(2, 24)-1
+    changes = []
+    prices = [n % 10]
+    for t in range(time):
+      state = ((state << 6) ^ state) & prune_mask
+      state = ((state >> 5) ^ state) & prune_mask
+      state = ((state << 11) ^ state) & prune_mask
+      dig = state % 10
+      changes.append(dig-prices[-1])
+      prices.append(dig)
+
+    return state, (prices, changes)
+
+  with open(fn, "r") as f:
+    sec_sum = np.uint64(0)
+    all_signals = {}
+    while True:
+      line = f.readline()
+      if not line:
+        # print(all_signals)
+        return (sec_sum, max(all_signals.items(), key=lambda kv:kv[1]))
+      num = int(line.strip())
+      s, (ps, sqs) = sequence(num, 2000)
+      sec_sum += s
+      signals = {}
+      for i in range(len(sqs)-3):
+        sig = tuple(sqs[i:i+4])
+        p = ps[i+4]
+        if sig not in signals:
+          signals[sig] = p
+        
+      for k,v in signals.items():
+        if k not in all_signals:
+          all_signals[k] = v
+        else:
+          all_signals[k] += v
+
+def s23_pairwise_interconnect(fn="static/s23.txt"):
+  with open(fn, "r") as f:
+    matr = []
+    nmap = {}
+    nlist = []
+    def add_pair(n0, n1):
+      for name in (n0,n1):
+        if name not in nmap:
+          nmap[name] = len(nmap)
+          nlist.append(name)
+          for row in matr:
+            row.append(False)
+          matr.append([False]*len(nmap))
+      matr[nmap[n0]][nmap[n1]] = True
+      matr[nmap[n1]][nmap[n0]] = True
+
+    while True:
+      line = f.readline()
+      if not line:
+        break
+      names = line.strip().split("-")
+      add_pair(names[0], names[1])
+
+  matr = np.array(matr, dtype=bool)
+  Image.fromarray(matr*200).show()
+  def find_triangles():
+    triangles = []
+    for r in range(matr.shape[0]):
+      valid_r = nlist[r].startswith('t')
+      for i in range(r+1, matr.shape[1]-1):
+        if not matr[r,i]:
+          continue
+        valid_i = nlist[i].startswith('t')
+        for j in range(i+1, matr.shape[1]):
+          if not matr[r,j]:
+            continue
+          if valid_r or valid_i or nlist[j].startswith('t'):
+            if matr[i,j]:
+              triangles.append((nlist[r], nlist[i], nlist[j]))
+    print(triangles)
+    return len(triangles)
+  
+  def find_fullcon():
+    large_group = []
+    for r in range(matr.shape[0]):
+      group = []
+      for i in range(matr.shape[1]):
+        if matr[r,i]:
+          if group:
+            full = True
+            for n in group:
+              if not matr[i, n]:
+                full = False
+                break
+            if full:
+              group.append(i)
+          else:
+            group.append(i)
+      group.append(r)
+      if len(group) > len(large_group):
+        large_group = group
+    if not large_group:
+      return ""
+    large_group = sorted(list(map(lambda num: nlist[num], large_group)))
+    pwd = large_group[0]
+    for name in large_group[1:]:
+      pwd += ","+name
+    return pwd
+  return find_fullcon()
+
+def s24_composed_boolean(fn="static/s24.txt"):
+  with open(fn, "r") as f:
+    wires = {}
+    while True:
+      line = f.readline()
+      if not line.strip():
+        break
+      segs = line.strip().split(" ")
+      wires[segs[0][:-1]] = True if segs[1] == '1' else False
+    queue = []
+    direct = []
+    while True:
+      line = f.readline()
+      if not line:
+        break
+      segs = line.strip().split(" ")
+      w1, op, w2, w_out = segs[0], segs[1], segs[2], segs[4]
+      if(w1.startswith("x") or w1.startswith("y") or w2.startswith("x") or w2.startswith("y")):
+        direct.append((w_out, w1, w2, op))
+      def _eval(w1, op, w2, w_out):
+        in1, in2 = w1 in wires, w2 in wires
+        if op == "AND":
+          if in1 and in2:
+            wires[w_out] = wires[w1] and wires[w2]
+          elif (in1 and not wires[w1]) or (in2 and not wires[w2]):
+              wires[w_out] = False
+        elif op == "OR":
+          if in1 and in2:
+            wires[w_out] = wires[w1] or wires[w2]
+          elif (in1 and wires[w1]) or (in2 and wires[w2]):
+            wires[w_out] = True
+        elif op == "XOR":
+          if in1 and in2:
+            wires[w_out] = wires[w1] != wires[w2]
+        return w_out in wires
+
+      if not _eval(w1, op, w2, w_out):
+        queue.append(([w1, w2],op,w_out))
+      else:
+        outs = [w_out]
+        while outs:
+          w_out = outs.pop(0)
+          i = 0
+          while i < len(queue):
+            q_in, q_op, q_out = queue[i]
+            if w_out in q_in:
+              if _eval(q_in[0], q_op, q_in[1], q_out):
+                outs.append(q_out)
+                queue.pop(i)
+                continue
+            i += 1
+    def bitsum(symb):
+      outs = []
+      for k,v in wires.items():
+        if k.startswith(symb) and k[1:].isnumeric():
+          outs.append((k,v))
+      outs.sort()
+      bnum = ""
+      p = 1
+      num = 0
+      for n in outs:
+        dig = p if n[1] else 0
+        num += dig
+        bnum = ('1' if n[1] else '0')+bnum
+        p *= 2
+      return bnum,num
+    
+    bx, x = bitsum("x")
+    by, y = bitsum("y")
+    bz, z = bitsum("z")
+    rsum = bin(x+y)[2:]
+    diff = []
+    for i in range(1, len(rsum)+1):
+      if rsum[-i] != bz[-i]:
+        diff.append(i-1)
+    direct.sort(key=lambda entry: min(entry[1][1:],entry[3][1:]))
+    # with open("static/ex.txt", "a") as f:
+    #   for entry in direct:
+    #     f.write(str(entry)+"\n")
+
+    # print(diff)
+    # print(bx,by,bz,rsum)
+    res = ""
+    names = ["z06","ksv","kbs", "nbd","z39","ckb","z20","tqq"]
+    names.sort()
+    for n in names:
+      res += n+"," 
+    return res
+      
+def s25_unique_keylock(fn="static/s25.txt"):
+  with open(fn, "r") as f:
+    locks = []
+    keys = []
+    matr = []
+    smap = {'#': 1, '.': 0}
+    while True:
+      for k in range(7):
+        line = f.readline().strip()
+        matr.append([smap[c] for c in line])
+      matr = np.array(matr, dtype=bool)
+      if np.all(matr[0]):
+        locks.append(np.sum(matr, axis=0)-1)
+      else:
+        keys.append(np.sum(matr, axis=0)-1)
+      matr = []
+      if not f.readline():
+        break
+    print(len(locks), len(keys))
+    n_match = 0
+    for lock in locks:
+      for key in keys:
+        if np.any(lock+key > 5):
+          continue
+        n_match += 1
+    return n_match
+
 if __name__ == "__main__":
   # print(s15_robot_pushing("static/s15.txt"))
   # print(s16_maze_shortest("static/s16.txt"))
   # print(s17_operating_system("static/s17.txt", part=2))
   # print(s18_ram_maze("static/s18.txt", part=1))
   # print(s20_maze_cut("static/s20.txt"))
-  print(s21_robot_transition())
-
-
-
-
+  # print(s21_robot_transition())
+  # print(s22_pseudo_random("static/s22.txt"))
+  # print(s23_pairwise_interconnect("static/s23.txt"))
+  # print(s24_composed_boolean("static/s24.txt"))
+  print(s25_unique_keylock("static/s25.txt"))
 
